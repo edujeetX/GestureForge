@@ -1,0 +1,424 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#08111f" />
+    <title>Gesture Forge - MediaPipe Hands + Three.js</title>
+    <style>
+        :root {
+            color-scheme: dark;
+            --panel: rgba(7, 14, 28, .78);
+            --line: rgba(148, 163, 184, .25);
+            --cyan: #22d3ee;
+            --violet: #a78bfa;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        html,
+        body {
+            width: 100%;
+            height: 100%;
+            margin: 0;
+            overflow: hidden;
+            background: #050a13;
+            font-family: Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif;
+        }
+
+        #stage {
+            position: fixed;
+            inset: 0;
+        }
+
+        #stage canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+
+        #hud {
+            position: fixed;
+            inset: 0;
+            pointer-events: none;
+            padding: max(16px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(16px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
+            display: grid;
+            grid-template-columns: minmax(250px, 360px) 1fr minmax(220px, 300px);
+            grid-template-rows: auto 1fr auto;
+            gap: 14px;
+        }
+
+        .panel {
+            background: var(--panel);
+            border: 1px solid var(--line);
+            border-radius: 16px;
+            backdrop-filter: blur(14px);
+            -webkit-backdrop-filter: blur(14px);
+            box-shadow: 0 16px 40px rgba(0, 0, 0, .28);
+            color: #e5edf7;
+        }
+
+        #statusPanel {
+            grid-column: 1;
+            grid-row: 1;
+            padding: 15px 16px;
+        }
+
+        h1 {
+            margin: 0 0 5px;
+            font-size: 18px;
+            letter-spacing: .02em;
+        }
+
+        .sub {
+            color: #94a3b8;
+            font-size: 12px;
+        }
+
+        .status-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-top: 12px;
+            font-size: 13px;
+        }
+
+        .dot {
+            width: 9px;
+            height: 9px;
+            border-radius: 50%;
+            background: #f59e0b;
+            box-shadow: 0 0 16px currentColor;
+        }
+
+        .dot.live {
+            background: #22c55e;
+        }
+
+        .dot.error {
+            background: #ef4444;
+        }
+
+        #gesturePanel {
+            grid-column: 3;
+            grid-row: 1;
+            padding: 14px;
+        }
+
+        .hand {
+            display: flex;
+            justify-content: space-between;
+            gap: 12px;
+            padding: 8px 0;
+            border-bottom: 1px solid var(--line);
+            font-size: 13px;
+        }
+
+        .hand:last-child {
+            border: 0;
+        }
+
+        .gesture {
+            color: var(--cyan);
+            font-weight: 700;
+        }
+
+        #previewWrap {
+            grid-column: 3;
+            grid-row: 3;
+            width: 100%;
+            aspect-ratio: 4/3;
+            position: relative;
+            overflow: hidden;
+        }
+
+        #preview {
+            width: 100%;
+            height: 100%;
+            display: block;
+            transform: scaleX(-1);
+            background: #020617;
+        }
+
+        #previewLabel {
+            position: absolute;
+            left: 10px;
+            bottom: 8px;
+            font-size: 11px;
+            color: #dbeafe;
+            text-shadow: 0 1px 4px #000;
+        }
+
+        #help {
+            grid-column: 1;
+            grid-row: 3;
+            padding: 13px 15px;
+            font-size: 12px;
+            line-height: 1.55;
+        }
+
+        #help b {
+            color: #f8fafc;
+        }
+
+        #help span {
+            color: #a8b5c7;
+        }
+
+        #startLayer {
+            position: fixed;
+            inset: 0;
+            z-index: 10;
+            display: grid;
+            place-items: center;
+            padding: 20px;
+            background: radial-gradient(circle at 50% 35%, rgba(34, 211, 238, .13), transparent 35%), rgba(2, 6, 23, .83);
+        }
+
+        #startCard {
+            width: min(520px, 100%);
+            padding: 26px;
+            text-align: center;
+            pointer-events: auto;
+        }
+
+        #startCard h2 {
+            margin: 0 0 10px;
+            font-size: clamp(24px, 5vw, 38px);
+        }
+
+        #startCard p {
+            color: #aab8ca;
+            line-height: 1.55;
+            margin: 0 0 20px;
+        }
+
+        button {
+            border: 0;
+            border-radius: 12px;
+            padding: 12px 20px;
+            font: 700 14px inherit;
+            color: #041018;
+            cursor: pointer;
+            background: linear-gradient(135deg, #67e8f9, #a78bfa);
+            box-shadow: 0 8px 28px rgba(34, 211, 238, .25);
+        }
+
+        button:disabled {
+            opacity: .55;
+            cursor: wait;
+        }
+
+        #errorText {
+            min-height: 20px;
+            margin-top: 12px;
+            color: #fca5a5;
+            font-size: 12px;
+        }
+
+        #hint {
+            grid-column: 2;
+            grid-row: 3;
+            justify-self: center;
+            align-self: end;
+            padding: 9px 14px;
+            color: #cbd5e1;
+            font-size: 12px;
+            opacity: .86;
+        }
+
+        @media (max-width:800px) {
+            #hud {
+                grid-template-columns: 1fr 150px;
+                grid-template-rows: auto 1fr auto;
+            }
+
+            #statusPanel {
+                grid-column: 1
+            }
+
+            #gesturePanel {
+                grid-column: 2
+            }
+
+            #previewWrap {
+                grid-column: 2;
+                width: 150px
+            }
+
+            #help {
+                grid-column: 1
+            }
+
+            #hint {
+                display: none
+            }
+        }
+
+        @media (max-width:540px) {
+            #hud {
+                grid-template-columns: 1fr 116px;
+                gap: 8px;
+                padding: 8px
+            }
+
+            #gesturePanel {
+                font-size: 11px;
+                padding: 9px
+            }
+
+            .hand {
+                display: block
+            }
+
+            .gesture {
+                display: block;
+                margin-top: 2px
+            }
+
+            #previewWrap {
+                width: 116px
+            }
+
+            #help {
+                font-size: 10px;
+                padding: 9px
+            }
+
+            #statusPanel {
+                padding: 10px
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <main id="stage" aria-label="Interactive 3D scene"></main>
+    <video id="video" playsinline muted hidden></video>
+    <div id="hud">
+        <section id="statusPanel" class="panel">
+            <h1>Gesture Forge</h1>
+            <div class="sub">MediaPipe Hands x Three.js</div>
+            <div class="status-row"><i id="statusDot" class="dot"></i><span id="status">Ready for camera access</span>
+            </div>
+        </section>
+        <section id="gesturePanel" class="panel" aria-live="polite">
+            <div class="hand"><span>Left hand</span><span id="leftGesture" class="gesture">Not found</span></div>
+            <div class="hand"><span>Right hand</span><span id="rightGesture" class="gesture">Not found</span></div>
+        </section>
+        <section id="help" class="panel">
+            <b>Pinch</b> <span>move</span> &nbsp; <b>Open palm</b> <span>rotate</span><br>
+            <b>Fist</b> <span>scale up/down</span> &nbsp; <b>Two pinches</b> <span>scale + spin</span>
+        </section>
+        <div id="hint" class="panel">Tip: keep hands 40-90 cm from the camera with even lighting.</div>
+        <section id="previewWrap" class="panel"><canvas id="preview" width="640" height="480"></canvas><span
+                id="previewLabel">HAND TRACKING</span></section>
+    </div>
+    <div id="startLayer">
+        <section id="startCard" class="panel">
+            <h2>Shape space with your hands</h2>
+            <p>Your camera frames are processed locally in the browser. Allow camera access, then use pinch, palm, and
+                fist gestures to manipulate the object.</p>
+            <button id="startButton">Enable camera &amp; play</button>
+            <div id="errorText"></div>
+        </section>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/three@0.160.1/build/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1675469240/hands.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils@0.3.1675466124/drawing_utils.js"></script>
+    <script>
+        (() => {
+            'use strict';
+            const $ = (s) => document.querySelector(s);
+            const stage = $('#stage'), video = $('#video'), preview = $('#preview'), ctx = preview.getContext('2d');
+            const status = $('#status'), dot = $('#statusDot'), startLayer = $('#startLayer'), startButton = $('#startButton'), errorText = $('#errorText');
+            const gestureEls = { Left: $('#leftGesture'), Right: $('#rightGesture') };
+            let hands, running = false, processing = false, lastVideoTime = -1, lastResultAt = 0;
+            const handState = new Map();
+
+            // ----- Three.js scene -----
+            const scene = new THREE.Scene(); scene.background = new THREE.Color(0x050a13); scene.fog = new THREE.FogExp2(0x050a13, 0.055);
+            const camera = new THREE.PerspectiveCamera(45, innerWidth / innerHeight, .1, 100); camera.position.set(0, 1.4, 8);
+            const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+            renderer.setPixelRatio(Math.min(devicePixelRatio, 2)); renderer.setSize(innerWidth, innerHeight); renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap; renderer.outputColorSpace = THREE.SRGBColorSpace; stage.appendChild(renderer.domElement);
+            scene.add(new THREE.HemisphereLight(0x9ddcff, 0x180d35, 1.25));
+            const key = new THREE.DirectionalLight(0xffffff, 2.3); key.position.set(4, 7, 5); key.castShadow = true; key.shadow.mapSize.set(1024, 1024); scene.add(key);
+            const rim = new THREE.PointLight(0x8b5cf6, 35, 15); rim.position.set(-4, 2, 3); scene.add(rim);
+            const geometry = new THREE.TorusKnotGeometry(1.1, .36, 128, 24);
+            const material = new THREE.MeshPhysicalMaterial({ color: 0x25c7e8, metalness: .42, roughness: .2, clearcoat: 1, clearcoatRoughness: .14, emissive: 0x071a30, emissiveIntensity: .6 });
+            const object = new THREE.Mesh(geometry, material); object.castShadow = true; object.receiveShadow = true; object.position.y = .5; scene.add(object);
+            const floor = new THREE.Mesh(new THREE.CircleGeometry(8, 64), new THREE.MeshStandardMaterial({ color: 0x081221, roughness: .72, metalness: .12, transparent: true, opacity: .9 })); floor.rotation.x = -Math.PI / 2; floor.position.y = -1.65; floor.receiveShadow = true; scene.add(floor);
+            const grid = new THREE.GridHelper(16, 24, 0x164e63, 0x101b33); grid.position.y = -1.63; scene.add(grid);
+            const stars = new THREE.BufferGeometry(), points = []; for (let i = 0; i < 700; i++) points.push((Math.random() - .5) * 30, Math.random() * 14 - 3, (Math.random() - .5) * 18 - 5); stars.setAttribute('position', new THREE.Float32BufferAttribute(points, 3)); scene.add(new THREE.Points(stars, new THREE.PointsMaterial({ color: 0x6fa8cc, size: .018, transparent: true, opacity: .72 })));
+            const target = { position: new THREE.Vector3(0, .5, 0), rotation: new THREE.Euler(.2, .35, 0), scale: 1 };
+
+            // ----- Gesture recognition -----
+            const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z);
+            const center = (lm) => ({ x: (lm[0].x + lm[5].x + lm[9].x + lm[13].x + lm[17].x) / 5, y: (lm[0].y + lm[5].y + lm[9].y + lm[13].y + lm[17].y) / 5 });
+            function classify(lm) {
+                const palm = Math.max(dist(lm[0], lm[9]), .04), pinch = dist(lm[4], lm[8]) / palm < .42;
+                const tips = [8, 12, 16, 20], pips = [6, 10, 14, 18]; let extended = 0;
+                for (let i = 0; i < 4; i++) if (dist(lm[tips[i]], lm[0]) > dist(lm[pips[i]], lm[0]) * 1.22) extended++;
+                if (pinch) return 'Pinch'; if (extended >= 4) return 'Open palm'; if (extended <= 1) return 'Fist'; return 'Neutral';
+            }
+            function updateInteractions(found) {
+                const now = performance.now();
+                found.forEach(h => {
+                    const prev = handState.get(h.label), c = center(h.lm); h.c = c; if (prev && prev.gesture === h.gesture) {
+                        const dx = c.x - prev.c.x, dy = c.y - prev.c.y;
+                        if (h.gesture === 'Pinch') { target.position.x = (.5 - c.x) * 8; target.position.y = (.5 - c.y) * 5 + 0.4; }
+                        else if (h.gesture === 'Open palm') { target.rotation.y += dx * 5.5; target.rotation.x += dy * 5.5; }
+                        else if (h.gesture === 'Fist') { target.scale = THREE.MathUtils.clamp(target.scale - dy * 3.2, .45, 2.5); }
+                    } handState.set(h.label, { c, gesture: h.gesture, t: now });
+                });
+                const pinches = found.filter(h => h.gesture === 'Pinch');
+                if (pinches.length === 2) {
+                    const a = pinches[0].c, b = pinches[1].c, d = Math.hypot(a.x - b.x, a.y - b.y), angle = Math.atan2(b.y - a.y, b.x - a.x), pair = handState.get('pair');
+                    if (pair) { target.scale = THREE.MathUtils.clamp(pair.baseScale * (d / pair.d), .45, 2.5); target.rotation.z = pair.baseRot + (angle - pair.angle); }
+                    else handState.set('pair', { d, angle, baseScale: target.scale, baseRot: target.rotation.z });
+                } else handState.delete('pair');
+            }
+            function onResults(results) {
+                processing = false; lastResultAt = performance.now(); ctx.save(); ctx.clearRect(0, 0, preview.width, preview.height); ctx.drawImage(results.image, 0, 0, preview.width, preview.height);
+                const found = []; gestureEls.Left.textContent = gestureEls.Right.textContent = 'Not found';
+                (results.multiHandLandmarks || []).forEach((lm, i) => {
+                    drawConnectors(ctx, lm, HAND_CONNECTIONS, { color: '#22d3ee', lineWidth: 3 }); drawLandmarks(ctx, lm, { color: '#f8fafc', fillColor: '#8b5cf6', lineWidth: 1, radius: 2 });
+                    // Mirrored preview reverses perceived handedness, so swap MediaPipe label for the user-facing side.
+                    const raw = results.multiHandedness?.[i]?.label || `Hand ${i + 1}`, label = raw === 'Left' ? 'Right' : raw === 'Right' ? 'Left' : raw;
+                    const gesture = classify(lm); if (gestureEls[label]) gestureEls[label].textContent = gesture; found.push({ label, gesture, lm });
+                }); ctx.restore(); updateInteractions(found);
+                status.textContent = `Tracking ${found.length} hand${found.length === 1 ? '' : 's'}`; dot.className = 'dot live';
+            }
+
+            async function start() {
+                startButton.disabled = true; errorText.textContent = ''; status.textContent = 'Requesting camera permission...';
+                try {
+                    if (!navigator.mediaDevices?.getUserMedia) throw new Error('Camera access is unavailable in this context. Open the file in a modern browser or via HTTPS/localhost.');
+                    const stream = await navigator.mediaDevices.getUserMedia({ audio: false, video: { facingMode: 'user', width: { ideal: 960 }, height: { ideal: 720 }, frameRate: { ideal: 30, max: 60 } } });
+                    video.srcObject = stream; await video.play(); preview.width = video.videoWidth || 640; preview.height = video.videoHeight || 480;
+                    hands = new Hands({ locateFile: f => `https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1675469240/${f}` });
+                    hands.setOptions({ maxNumHands: 2, modelComplexity: 1, minDetectionConfidence: .62, minTrackingConfidence: .62, selfieMode: true }); hands.onResults(onResults);
+                    running = true; startLayer.style.display = 'none'; status.textContent = 'Loading hand model...'; cameraLoop();
+                } catch (err) { console.error(err); errorText.textContent = err.name === 'NotAllowedError' ? 'Camera permission was denied. Allow camera access in browser settings and try again.' : err.message; status.textContent = 'Camera unavailable'; dot.className = 'dot error'; startButton.disabled = false; }
+            }
+            async function cameraLoop() {
+                if (!running) return; if (video.readyState >= 2 && video.currentTime !== lastVideoTime && !processing) { processing = true; lastVideoTime = video.currentTime; try { await hands.send({ image: video }); } catch (e) { processing = false; console.error(e); status.textContent = 'Hand model error'; dot.className = 'dot error'; } }
+                requestAnimationFrame(cameraLoop);
+            }
+            function animate(t) {
+                requestAnimationFrame(animate); const k = 1 - Math.pow(.001, 1 / 60); object.position.lerp(target.position, k); object.quaternion.slerp(new THREE.Quaternion().setFromEuler(target.rotation), k); const s = THREE.MathUtils.lerp(object.scale.x, target.scale, k); object.scale.setScalar(s);
+                if (performance.now() - lastResultAt > 1200 && running) { status.textContent = 'Show your hands to the camera'; dot.className = 'dot'; }
+                material.emissiveIntensity = .48 + Math.sin(t * .0015) * .12; renderer.render(scene, camera);
+            }
+            addEventListener('resize', () => { camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth, innerHeight); renderer.setPixelRatio(Math.min(devicePixelRatio, 2)); });
+            addEventListener('beforeunload', () => video.srcObject?.getTracks().forEach(t => t.stop()));
+            startButton.addEventListener('click', start); animate(0);
+        })();
+    </script>
+</body>
+
+</html>
