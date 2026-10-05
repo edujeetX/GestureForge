@@ -4,10 +4,6 @@ Gesture Forge is a browser-based 3D object manipulation game controlled entirely
 
 The application runs on the client side, tracks up to two hands through the webcam, and maps gestures such as pinch, open palm, and fist to movement, rotation, and scaling.
 
-## Live Demo
-
-> Add your deployed GitHub Pages URL here:
->
 > [Live Demo](https://edujeetX.github.io/GestureForge/)
 
 ## Features
